@@ -39,10 +39,8 @@ int main(int argc, char** argv) {
         struct pqueue queue = pqueue_build(freqs);
         struct helement* root = htree_build(&queue);
 
-        struct buffer_hcode code_map = {
-            .data = calloc(UINT8_MAX, sizeof(struct hcode)),
-            .len = UINT8_MAX
-        };
+        struct buffer_hcode code_map;
+        buffer_alloc_z(&code_map, UINT8_MAX);
 
         htree_encode(root, &code_map, 0, 0);
 
@@ -53,7 +51,6 @@ int main(int argc, char** argv) {
         }
 
         fformat_compress(&io, code_map, &contents);
-
         {
             io_seek(&io, 0, SEEK_END);
             long end = io_tell(&io);
