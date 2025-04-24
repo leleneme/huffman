@@ -18,6 +18,12 @@
 static struct buffer_u8 read_entire_file(const char* path);
 static void usage(const char* program, FILE* file);
 
+// Since we can't recover from errors at all, we just exit :)
+#define DIE_IF(expr)        \
+    if ((expr)) {           \
+        exit(EXIT_FAILURE); \
+    }
+
 int main(int argc, char** argv) {
     if (argc != 4) {
         usage(argv[0], stderr);
@@ -30,35 +36,37 @@ int main(int argc, char** argv) {
 
     if (strcmp(method, "c") == 0) {
         struct buffer_u8 contents = read_entire_file(target);
-        if (contents.data == NULL) {
-            return EXIT_FAILURE;
-        }
+        DIE_IF(!contents.data);
 
         printf("- compressing '%s' of size %zu bytes\n", target, contents.len);
         struct buffer_usize freqs = frequencies_build(&contents);
+        DIE_IF(!freqs.data);
+
         struct pqueue queue = pqueue_build(freqs);
+        DIE_IF(!queue.items);
+
         struct helement* root = htree_build(&queue);
+        DIE_IF(!root);
 
         struct buffer_hcode code_map;
         buffer_alloc_z(&code_map, UINT8_MAX);
+        DIE_IF(!code_map.data);
 
         htree_encode(root, &code_map, 0, 0);
 
         struct io_stream io = io_fopen(out_path, "wb");
-        if (!io.valid) {
-            fprintf(stderr, "invalid file stream for '%s'\n", out_path);
-            goto cleanup_c;
-        }
+        DIE_IF(!io.valid);
 
-        fformat_compress(&io, code_map, &contents);
-        {
+        bool result = fformat_compress(&io, code_map, &contents);
+        if (!result) {
+            fprintf(stderr, "failed to compress file '%s'\n", target);
+        } else {
             io_seek(&io, 0, SEEK_END);
             long end = io_tell(&io);
             double ratio = (double)contents.len / end;
             printf("- written to '%s' with '%ld' bytes (ratio of x%.2f)\n", out_path, end, ratio);
         }
 
-    cleanup_c:
         io_close(&io);
         buffer_free(&code_map);
         tree_free(root);
@@ -66,30 +74,17 @@ int main(int argc, char** argv) {
         buffer_free(&freqs);
         buffer_free(&contents);
     } else if (strcmp(method, "d") == 0) {
-        struct io_stream io, os = { 0 };
-        struct buffer_u8 data = { 0 };
+        struct io_stream io = io_fopen(target, "rb");
+        DIE_IF(!io.valid);
 
-        io = io_fopen(target, "rb");
-        if (!io.valid) {
-            fprintf(stderr, "invalid file stream for '%s'\n", target);
-            goto cleanup_d;
-        }
+        struct buffer_u8 data = fformat_decompress(&io);
+        DIE_IF(!data.data);
 
-        data = fformat_decompress(&io);
-        if (!data.data) {
-            fprintf(stderr, "failed to decompress file\n");
-            goto cleanup_d;
-        }
-
-        os = io_fopen(out_path, "wb");
-        if (!os.valid) {
-            fprintf(stderr, "invalid file stream for '%s'\n", out_path);
-            goto cleanup_d;
-        }
+        struct io_stream os = io_fopen(out_path, "wb");
+        DIE_IF(!os.valid);
 
         io_write(&os, data.data, data.len * sizeof(u8));
 
-    cleanup_d:
         io_close(&io);
         io_close(&os);
         buffer_free(&data);

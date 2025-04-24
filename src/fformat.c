@@ -15,6 +15,7 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <endian.h>
+#include <errno.h>
 
 #define write_macro(type, f)                                                             \
     static inline unsigned long io_write_##type##_le(struct io_stream* io, type value) { \
@@ -22,7 +23,6 @@
         return io_write(io, &le, sizeof(type));                                          \
     }
 
-// usize io_read(struct io_stream* io, void* buffer, usize size) {
 #define read_macro(type, f)                                        \
     static inline type io_read_##type##_le(struct io_stream* io) { \
         type le;                                                   \
@@ -30,6 +30,7 @@
         return f(le);                                              \
     }
 
+// clang-format off
 write_macro(u64, htole64)
 write_macro(u32, htole32)
 write_macro(u16, htole16)
@@ -45,7 +46,10 @@ read_macro(u8, )
 
 #define HCODE_ENTRY_SIZE (sizeof(u8) + sizeof(u16) + sizeof(u8))
 
-void fformat_compress(struct io_stream* io, struct buffer_hcode code_map, struct buffer_u8* input) {
+bool fformat_compress(struct io_stream* io, struct buffer_hcode code_map, struct buffer_u8* input) {
+    // This needs to be here since clang-format fucks up the line above, because of stupid macro formatting
+    // clang-format on
+
     usize code_count = 0;
     u8 max_code_len = 0;
 
@@ -92,7 +96,11 @@ void fformat_compress(struct io_stream* io, struct buffer_hcode code_map, struct
         u8 symbol = input->data[i];
         struct hcode code = code_map.data[symbol];
         if (code.bit_len == 0) {
-            abort();
+            fprintf(stderr, "error: code for byte '0x%2x' was not generated\n",
+                symbol);
+
+            buffer_free(&compressed);
+            return false;
         }
 
         bitstream_write_bits(&bs, code.bits, code.bit_len);
@@ -100,6 +108,8 @@ void fformat_compress(struct io_stream* io, struct buffer_hcode code_map, struct
 
     io_write(io, bs.data, bs.byte_pos + (bs.bit_pos > 0 ? 1 : 0));
     buffer_free(&compressed);
+
+    return true;
 }
 
 struct buffer_u8 fformat_decompress(struct io_stream* io) {
@@ -110,7 +120,7 @@ struct buffer_u8 fformat_decompress(struct io_stream* io) {
     io_read(io, &magic, countof(FILE_MAGIC) * sizeof(u8));
 
     if (memcmp(magic, FILE_MAGIC, countof(FILE_MAGIC)) != 0) {
-        fprintf(stderr, "- file magic does not match\n");
+        fprintf(stderr, "error: file magic does not match\n");
         return decompressed;
     }
 
@@ -126,7 +136,10 @@ struct buffer_u8 fformat_decompress(struct io_stream* io) {
 
     struct buffer_hcode code_map;
     buffer_alloc_z(&code_map, UINT8_MAX);
-    assert(code_map.data);
+    if (!code_map.data) {
+        fprintf(stderr, "error: failed to allocate code map: %s", strerror(errno));
+        return decompressed;
+    }
 
     u8 max_code_len = 0;
     for (usize i = 0; i < entries_count; i++) {
@@ -152,13 +165,22 @@ struct buffer_u8 fformat_decompress(struct io_stream* io) {
 
     struct buffer_u8 compressed_data;
     buffer_alloc(&compressed_data, compressed_size);
-    assert(compressed_data.data);
+    if (!compressed_data.data) {
+        fprintf(stderr, "error: failed to allocate compressed data: %s\n", strerror(errno));
+        buffer_free(&code_map);
+        return decompressed;
+    }
 
     io_seek(io, offset_to_content, SEEK_SET);
     io_read(io, compressed_data.data, compressed_size * sizeof(u8));
 
     buffer_alloc(&decompressed, original_file_size);
-    assert(decompressed.data);
+    if (!decompressed.data) {
+        fprintf(stderr, "error: failed to allocate decompressed data: %s\n", strerror(errno));
+        buffer_free(&code_map);
+        buffer_free(&compressed_data);
+        return decompressed;
+    }
 
     u16 current_bits = 0;
     u8 current_len = 0;
@@ -174,8 +196,11 @@ struct buffer_u8 fformat_decompress(struct io_stream* io) {
     while (output_pos < decompressed.len) {
         u8 bit;
         if (!bitstream_read_bit(&bs, &bit)) {
-            fprintf(stderr, "Unexpected end of compressed data\n");
-            abort();
+            fprintf(stderr, "error: unexpected end of compressed data\n");
+            buffer_free(&code_map);
+            buffer_free(&compressed_data);
+            buffer_free(&decompressed);
+            return decompressed;
         }
 
         current_bits = (current_bits << 1) | bit;
@@ -199,13 +224,17 @@ struct buffer_u8 fformat_decompress(struct io_stream* io) {
         }
 
         if (current_len > 16) {
-            fprintf(stderr, "caught infinite loop\n");
-            abort();
+            fprintf(stderr, "error: caught infinite loop while decompressing, is the file ill formatted?\n");
+            buffer_free(&code_map);
+            buffer_free(&compressed_data);
+            buffer_free(&decompressed);
+            return decompressed;
         }
     }
 
     buffer_free(&code_map);
     buffer_free(&compressed_data);
+
     return decompressed;
 }
 

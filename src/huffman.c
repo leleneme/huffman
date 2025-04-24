@@ -9,6 +9,7 @@
 */
 
 #include "huffman.h"
+#include <errno.h>
 
 struct buffer_usize frequencies_build(struct buffer_u8* input) {
     struct buffer_usize buf = { 0 };
@@ -17,7 +18,7 @@ struct buffer_usize frequencies_build(struct buffer_u8* input) {
     usize* freqs = calloc(freqs_size, sizeof(usize));
 
     if (freqs == NULL) {
-        fprintf(stderr, "failed to allocate frequency map\n");
+        fprintf(stderr, "failed to allocate frequency map: %s\n", strerror(errno));
         return buf;
     }
 
@@ -51,7 +52,7 @@ void pqueue_sort(struct pqueue* queue) {
 struct helement* helement_make(u8 byte, usize frequency) {
     struct helement* new = calloc(1, sizeof(struct helement));
     if (!new) {
-        fprintf(stderr, "failed to allocate tree node\n");
+        fprintf(stderr, "failed to allocate tree node: %s\n", strerror(errno));
         return NULL;
     }
 
@@ -69,6 +70,7 @@ struct pqueue pqueue_build(struct buffer_usize frequencies) {
     };
 
     if (!q.items) {
+        fprintf(stderr, "failed to allocate priority queue memory: %s\n", strerror(errno));
         return q;
     }
 
@@ -94,6 +96,10 @@ struct helement* htree_build(struct pqueue* queue) {
         queue->len -= 2;
 
         struct helement* merged = helement_make(0, left->frequency + right->frequency);
+        if (!merged) {
+            return NULL;
+        }
+
         merged->left = left;
         merged->right = right;
 
@@ -125,6 +131,7 @@ void htree_encode(struct helement* node, struct buffer_hcode* codes, u16 bits, u
 void tree_free(struct helement* element) {
     if (!element)
         return;
+
     tree_free(element->left);
     tree_free(element->right);
     free(element);
@@ -133,6 +140,7 @@ void tree_free(struct helement* element) {
 void pqueue_free(struct pqueue* queue) {
     if (!queue)
         return;
+
     free(queue->items);
     queue->count = queue->len = 0;
 }
