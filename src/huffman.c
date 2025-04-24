@@ -33,8 +33,8 @@ struct buffer_usize frequencies_build(struct buffer_u8* input) {
 }
 
 int pkey_cmp(const void* a, const void* b) {
-    struct helement* ka = *(struct helement**)a;
-    struct helement* kb = *(struct helement**)b;
+    struct helement* ka = *(struct helement* const*)a;
+    struct helement* kb = *(struct helement* const*)b;
 
     if (ka->frequency > kb->frequency)
         return -1;

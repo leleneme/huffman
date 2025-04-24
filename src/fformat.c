@@ -8,9 +8,13 @@
   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+// for htoleXX and leXXtoh
+#define _DEFAULT_SOURCE
+
 #include "fformat.h"
 #include <stdbool.h>
 #include <assert.h>
+#include <endian.h>
 
 #define write_macro(type, f)                                                             \
     static inline unsigned long io_write_##type##_le(struct io_stream* io, type value) { \
@@ -26,15 +30,15 @@
         return f(le);                                              \
     }
 
-write_macro(u64, htole64);
-write_macro(u32, htole32);
-write_macro(u16, htole16);
-write_macro(u8, );
+write_macro(u64, htole64)
+write_macro(u32, htole32)
+write_macro(u16, htole16)
+write_macro(u8, )
 
-read_macro(u64, le64toh);
-read_macro(u32, le32toh);
-read_macro(u16, le16toh);
-read_macro(u8, );
+read_macro(u64, le64toh)
+read_macro(u32, le32toh)
+read_macro(u16, le16toh)
+read_macro(u8, )
 
 #undef read_macro
 #undef write_macro
@@ -119,7 +123,6 @@ struct buffer_u8 fformat_decompress(struct io_stream* io) {
         long current_position = io_tell(io);
         entries_count = (offset_to_content - current_position) / HCODE_ENTRY_SIZE;
     }
-    printf("%zu\n", entries_count);
 
     struct buffer_hcode code_map;
     buffer_alloc_z(&code_map, UINT8_MAX);

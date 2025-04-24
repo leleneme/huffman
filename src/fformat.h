@@ -62,7 +62,7 @@
 #include "huffman.h"
 #include <stdbool.h>
 
-static const u8 FILE_MAGIC[6] = { 0x0, 0x6c, 0x62, 0x63, 0x61, 0x0 }; // \0lbca
+static u8 FILE_MAGIC[6] = { 0x0, 0x6c, 0x62, 0x63, 0x61, 0x0 }; // \0lbca
 
 void fformat_compress(struct io_stream* io, struct buffer_hcode code_map, struct buffer_u8* input);
 struct buffer_u8 fformat_decompress(struct io_stream* io);

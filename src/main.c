@@ -67,6 +67,7 @@ int main(int argc, char** argv) {
         buffer_free(&contents);
     } else if (strcmp(method, "d") == 0) {
         struct io_stream io, os = { 0 };
+        struct buffer_u8 data = { 0 };
 
         io = io_fopen(target, "rb");
         if (!io.valid) {
@@ -74,7 +75,7 @@ int main(int argc, char** argv) {
             goto cleanup_d;
         }
 
-        struct buffer_u8 data = fformat_decompress(&io);
+        data = fformat_decompress(&io);
         if (!data.data) {
             fprintf(stderr, "failed to decompress file\n");
             goto cleanup_d;

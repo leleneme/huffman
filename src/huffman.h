@@ -46,11 +46,13 @@ struct buffer_usize {
         (buf)->len = count;                                 \
     } while (0);
 
-#define buffer_free(buf)    \
-    do {                    \
-        free((buf)->data);  \
-        (buf)->data = NULL; \
-        (buf)->len = 0;     \
+#define buffer_free(buffer)        \
+    do {                           \
+        if ((buffer)->data) {      \
+            free((buffer)->data);  \
+            (buffer)->data = NULL; \
+        }                          \
+        (buffer)->len = 0;         \
     } while (0)
 
 struct helement {
